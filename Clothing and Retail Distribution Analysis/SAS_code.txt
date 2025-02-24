@@ -1,0 +1,165 @@
+/* Business Analysis of a Clothing Retail and Distribution company using SAS by Diane Haiden
+This project focuses on helping a retail organization increase sales and maximize profits through more effective direct marketing promotions. The organization's strategic goals include identifying customers who respond positively to marketing promotions, increasing the quantity and profitability of orders, and predicting future business growth.
+*/
+
+/* (4.0) Find the central tendency of the sales data using PROMOS, AVRG, CC_CARD, FRE, and MON */ 
+proc means data=WORK.SALES chartype mean median n mode vardef=df qmethod=os; 
+var PROMOS AVRG CC_CARD FRE MON; 
+run; 
+
+/* ---------------------------------------------------------------------------------------------------- */ 
+/* ---------------------------------------------------------------------------------------------------- */ 
+/* (4.0) Find the measures of spread or dispersion of the sales data with a focus on PROMOS, AVRG, CC_CARD, FRE, and MON */ 
+proc means data=WORK.SALES chartype std min max var range vardef=df q1 q3 qmethod=os; 
+var PROMOS AVRG CC_CARD FRE MON; 
+run; 
+
+/* ---------------------------------------------------------------------------------------------------- */ 
+/* ---------------------------------------------------------------------------------------------------- */ 
+/* (4.0) Find the central tendency of the orders data with a focus on unit_price, quantity, product_id, discount, and gross_sale */
+proc means data=WORK.ORDERS chartype mean median n mode vardef=df qmethod=os; 
+var unit_price quantity product_id discount gross_sale; 
+run; 
+
+/* ---------------------------------------------------------------------------------------------------- */ 
+/* ---------------------------------------------------------------------------------------------------- */ 
+/* (4.0) Find the measures of spread or dispersion of the sales data with a focus on unit_price, quantity, product_id, discount, and gross_sale */
+proc means data=WORK.ORDERS chartype std min max n var range vardef=df q1 q3 qmethod=os; 
+var unit_price quantity product_id discount gross_sale; 
+run; 
+
+/* ---------------------------------------------------------------------------------------------------- */ 
+/* ---------------------------------------------------------------------------------------------------- */ 
+/* Create a bar chart on the orders data to compare each discount group and to show which group is most common */
+ods graphics / reset width=6.4in height=4.8in imagemap; 
+proc sgplot data=WORK.ORDERS; 
+vbar discount /; 
+yaxis grid; 
+run; 
+
+ods graphics / reset;
+/* ---------------------------------------------------------------------------------------------------- */ 
+/* ---------------------------------------------------------------------------------------------------- */ 
+/* (5.0) Performs simple linear regression to the sales data, 
+the dependent variable = AVRG, the independent variable = PROMOS, 
+the data was limited where CC_CARD = 1 
+*/ 
+proc reg data=WORK.SALES(where=(CC_CARD=1)) alpha=0.05 
+plots(only maxpoints=none)=(diagnostics residuals fitplot observedbypredicted); 
+model AVRG=PROMOS /; 
+run; 
+quit; 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* ---------------------------------------------------------------------------------------------------- */ 
+/* ---------------------------------------------------------------------------------------------------- */ 
+/* (6.0) NONLINEAR REGRESSION */ 
+/* First filter the data and create a new table where CC_CARD = 1 */ 
+proc sql noprint; 
+create table work.filter as select * from WORK.SALES where(CC_CARD EQ 1); 
+quit; 
+
+/* Next perform nonlinear regression to address business question 1*/ 
+PROC NLIN data=WORK.FILTER METHOD=MARQUARDT; 
+PARAMETERS a=150 b=-0.02; 
+MODEL AVRG=a * EXP(b * PROMOS); 
+OUTPUT OUT=PredictedData P=Predicted_AVRG;
+RUN; 
+
+/* ---------------------------------------------------------------------------------------------------- */ 
+/* ---------------------------------------------------------------------------------------------------- */ 
+/* (7.0) This code performs polynomial regression*/ 
+proc glmselect data=WORK.FILTER outdesign(addinputvars)=Work.reg_design; 
+model AVRG=PROMOS PROMOS*PROMOS PROMOS*PROMOS*PROMOS / showpvalues 
+selection=none; 
+run; 
+
+proc reg data=Work.reg_design alpha=0.05 plots(only maxpoints=none)=(diagnostics residuals observedbypredicted); 
+ods select DiagnosticsPanel ResidualPlot ObservedByPredicted; 
+model AVRG=&_GLSMOD /; 
+run; 
+quit; 
+
+/* ---------------------------------------------------------------------------------------------------- */ 
+/* ---------------------------------------------------------------------------------------------------- */ 
+/* (8.0) This code performs generalized additive model */ 
+PROC GAM data=WORK.FILTER; 
+MODEL AVRG=SPLINE(PROMOS); 
+OUTPUT OUT=PredictedData P=Predicted_AVRG; 
+RUN; 
+
+/* ---------------------------------------------------------------------------------------------------- */ 
+/* ---------------------------------------------------------------------------------------------------- */ 
+/* (9.0) This code performs linear regression on the sales data */ 
+proc reg data=WORK.SALES alpha=0.05 plots(only maxpoints=none)=(diagnostics 
+residuals fitplot observedbypredicted); 
+model MON=FRE /; 
+run; 
+quit;
+/* ---------------------------------------------------------------------------------------------------- */ 
+/* ---------------------------------------------------------------------------------------------------- */ 
+/* (10.0) T-test: comparing average unit price and quantity */ 
+/* First we prep the data for a T-test on the orders data by flagging top-selling products */ 
+/* Calcualte total sales per product */ 
+proc sql; 
+create table product_sales as select product_id, sum(net_sale) as total_sales 
+from WORK.ORDERS group by product_id; 
+quit; 
+
+/* Identify top 10% products */ 
+proc univariate data=product_sales noprint; 
+var total_sales; 
+output out=quantile pctlpts=90 pctlpre=Q; 
+run; 
+
+data top_sellers_flag; 
+merge product_sales quantile; 
+if total_sales >=Q90 then 
+is_top_seller=1; 
+else is_top_seller=0; 
+run; 
+/* Merge the flagged data back to the orginal dataset */ 
+proc sql; 
+create table flagged_data as 
+select a.*, b.is_top_seller 
+from WORK.ORDERS a 
+left join top_sellers_flag b 
+on a.product_id - b.product_id; 
+quit; 
+
+/* Compute average unit price and quantity for top-selling products vs out products */ 
+proc means data=flagged_data mean; 
+class is_top_seller; 
+var unit_price quantity; 
+run; 
+
+
+/* ---------------------------------------------------------------------------------------------------- */ 
+/* ---------------------------------------------------------------------------------------------------- */ 
+/* (11.0) MANOVA - Examine gross sales, net sales and discount */ 
+/* Perform MANOVA */ 
+proc anova data=WORK.ORDERS; 
+class discount; 
+model gross_sale net_sale=discount; 
+manova h=discount / printe; 
+run; 
+quit; 
+
+/* Create multidimensional bubble chart */ 
+proc sgplot data=WORK.ORDERS; 
+bubble x=discount y=gross_sale size=net_sale / group=discount transparency=0.5; 
+xaxis label="Discount Levels"; 
+yaxis label="Gross Sales:; 
+run; 
