@@ -1,1 +1,94 @@
-new
+/* Project: Examining the Impact of Tariff Policy on Goldman Sachs' Stock Performance and Volatility */
+/* Author: Diane Haiden */
+/* Date: June 2025 */
+/* Description: This SAS program analyzes how tariff policies influence the stock performance and volatility of Goldman Sachs by identifying correlations and potential market trends using SAS Studio on historical stock data and tariff information. */
+
+/* Importing Stock Data */
+FILENAME REFFILE '/.../GoldmanSachs_stock.xlsx';
+
+PROC IMPORT DATAFILE=REFFILE
+	DBMS=XLSX
+	OUT=WORK.GS_STOCK;
+	GETNAMES=YES;
+RUN;
+
+
+/* Importing Trade Policy Data */
+FILENAME REFFILE '/.../Trade_Policy.xlsx';
+
+PROC IMPORT DATAFILE=REFFILE
+	DBMS=XLSX
+	OUT=WORK.Tariff;
+	GETNAMES=YES;
+RUN;
+
+
+/* Merge datasets by Date */
+proc sort data=WORK.GS_STOCK out=work._tmpsort1_;
+	by Date;
+run;
+
+proc sort data=WORK.TARIFF out=work._tmpsort2_;
+	by Date;
+run;
+
+data WORK.MERGED_DATA;
+	merge _tmpsort1_ (keep=Open High Low Close Daily_Return Variance_Daily_Return 
+		Daily_Volatility 'Adj Close'n Volume Date) _tmpsort2_(keep=Tariff_EVENT 
+		Retaliatory_Tariffs_by_China Tariff_action GROUP 
+		'Chinese tariffs on ROW exports'n 'Chinese tariffs on US exports'n 
+		'US tariffs on Chinese exports'n 'US tariffs on ROW exports'n Date);
+	by Date;
+run;
+
+proc delete data=work._tmpsort1_ work._tmpsort2_;
+run;
+
+
+/* Correlation Analysis */
+proc corr data=WORK.MERGED_DATA pearson nosimple plots=matrix;
+	var Daily_Return 'Adj Close'n Volume;
+	with Tariff_EVENT;
+run;
+
+
+/* Multiple Linear Regression - Daily Return */
+proc reg data=WORK.MERGED_DATA alpha=0.05 plots(only)=(diagnostics residuals 
+		observedbypredicted);
+	model Daily_Return=Tariff_EVENT Volume Open High Low /;
+	run;
+quit;
+
+
+/* Multiple Linear Regression - Adjusted Close Price */
+proc reg data=WORK.MERGED_DATA alpha=0.05 plots(only)=(diagnostics residuals 
+		observedbypredicted);
+	model 'Adj Close'n=Tariff_EVENT Volume Open High Low /;
+	run;
+quit;
+
+
+/* T-Test for Retaliatory Tariff Impact on Volatility */
+ods noproctitle;
+ods graphics / imagemap=on;
+
+/* Test for normality */
+proc univariate data=WORK.MERGED_DATA normal mu0=0;
+	ods select TestsForNormality;
+	class Retaliatory_Tariffs_by_China;
+	var Daily_Return;
+run;
+
+/* t test */
+proc ttest data=WORK.MERGED_DATA sides=2 h0=0 plots(showh0);
+	class Retaliatory_Tariffs_by_China;
+	var Daily_Return;
+run;
+
+
+/* Linear Regression for Volatility Prediction */
+proc reg data=WORK.MERGED_DATA alpha=0.05 plots(only)=(diagnostics residuals 
+		fitplot observedbypredicted);
+	model Daily_Return=Retaliatory_Tariffs_by_China /;
+	run;
+quit;
