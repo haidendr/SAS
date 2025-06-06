@@ -92,3 +92,25 @@ proc reg data=WORK.MERGED_DATA alpha=0.05 plots(only)=(diagnostics residuals
 	model Daily_Return=Retaliatory_Tariffs_by_China /;
 	run;
 quit;
+
+/* time-series graph of GS, JPM, S&P with tariff*/
+proc sort data=WORK.ALL out=_SeriesPlotTaskData;
+	by Date;
+run;
+
+proc sgplot data=_SeriesPlotTaskData;
+	series x=Date y=Close / group=Symbol;
+	
+/* adding a reference line to show China retaliatory tariffs*/	
+	refline "02APR2018"d "10FEB2025"d "10MAR2025"d "10APR2025"d "12APR2025"d / 
+        axis=x lineattrs=(pattern=solid color=red);
+	
+	xaxis grid;
+	yaxis grid;
+run;
+
+ods graphics / reset;
+
+proc datasets library=WORK noprint;
+	delete _SeriesPlotTaskData;
+	run;
