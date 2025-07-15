@@ -1,0 +1,207 @@
+/* EXPLORATORY DATA ANALYSIS*/
+proc contents data=WORK.IMMUNIZATION;
+run;
+/* omit records where population size less than 10*/
+data immunization_filtered;
+  set WORK.IMMUNIZATION;
+  /* Remove entries with suppressed population size or missing vaccine rates */
+  if POPULATION_SIZE ne '<10 (not shown)';
+run;
+/* Frequency distribution of observations across counties*/
+proc sql;
+  create table county_freq as
+  select COUNTY, count(*) as Frequency
+  from immunization_filtered
+  group by COUNTY
+  order by Frequency desc;
+quit;
+/* Step 1: Create frequency table */
+proc freq data=WORK.IMMUNIZATION_FILTERED;
+  tables COUNTY / out=CountyFreq;
+run;
+/* Step 2: Sort by frequency in descending order */
+proc sort data=CountyFreq out=CountyFreqSorted;
+  by descending COUNT;
+run;
+/* Step 3: Keep only the top 10 records */
+data Top10CountyFreq;
+  set CountyFreqSorted;
+  if _N_ <= 10;
+run;
+/* Step 4: Display results */
+proc print data=Top10CountyFreq noobs;
+  title "Top 10 Counties by Frequency";
+run;
+proc sgplot data=Top10CountyFreq;
+  hbar COUNTY / response=COUNT stat=sum;
+  yaxis discreteorder=data label="County";
+  xaxis label="Number of Records";
+  title "Top 10 Counties by Frequency";
+run;
+/* Descriptive statistics using MEANS procedure*/
+/* excludes all records with pop_bin = 0*/
+/* uses filtered dataset*/
+proc means data=immunization_filtered n mean std min max;
+    var Tdap MenACWY COVID Flu HPV_initiation HPV_complete Teen_series_age_13_only;
+run;
+/* Explore Correlations and Trends */
+/* This will help spot which vaccinations tend to go hand-in-hand */
+proc corr data=immunization_filtered;
+var COVID Flu HPV_complete HPV_initiation MenACWY Tdap Teen_series_age_13_only;
+run;
+
+/* checking distribution skew out outliers for each variable*/
+proc univariate data=immunization_filtered;
+  var Tdap MenACWY COVID Flu HPV_initiation HPV_complete Teen_series_age_13_only;
+  histogram / normal;
+  inset mean std skewness kurtosis;
+run;
+
+/*-----------------------------------------------------------------------*/
+
+/* One-way ANOVA by county for each vaccine */
+/* filter data, work without blank immunization rates */
+data immunization_filtered;
+  set WORK.IMMUNIZATION;
+
+  /* Remove entries with suppressed population size or missing vaccine rates */
+  if POPULATION_SIZE ne '<10 (not shown)';
+run;
+proc anova data=immunization_filtered;
+class COUNTY;
+model Tdap=COUNTY;
+run;
+proc anova data=immunization_filtered;
+class COUNTY;
+model MenACWY=COUNTY;
+run;
+proc anova data=immunization_filtered;
+class COUNTY;
+model COVID=COUNTY;
+run;
+proc anova data=immunization_filtered;
+class COUNTY;
+model Flu=COUNTY;
+run;
+proc anova data=immunization_filtered;
+class COUNTY;
+model HPV_initiation=COUNTY;
+run;
+proc anova data=immunization_filtered;
+class COUNTY;
+model HPV_complete=COUNTY;
+run;
+proc anova data=immunization_filtered;
+class COUNTY;
+model Teen_series_age_13_only=COUNTY;
+run;
+
+/*-----------------------------------------------------------------------*/
+
+/* Kruskal-Wallis test (non-parametric alternative by county for each vaccine */
+/* use to compare the distribution of the vaccines across different counties*/
+/* does not assume normality; useful for skewed data or ordinal responses*/
+proc npar1way data=immunization_filtered wilcoxon;
+class COUNTY;
+var Tdap MenACWY COVID Flu HPV_initiation HPV_complete Teen_series_age_13_only;
+run;
+
+/*-----------------------------------------------------------------------*/
+/*-----------------------------------------------------------------------*/
+
+
+
+
+/* Analysis for Question 2 */
+/* filter data, work without blank immunization rates */
+data immunization_filtered;
+  set WORK.IMMUNIZATION;
+  /* Remove entries with suppressed population size or missing vaccine rates */
+  if POPULATION_SIZE ne '<10 (not shown)';
+run;
+proc univariate data=immunization_filtered;
+var Tdap MenACWY COVID Flu HPV_initiation HPV_complete Teen_series_age_13_only;
+histogram;
+run;
+/* Run Correlation Analysis to test hypothesis */
+/* Since the distributions appear to be normal we can use Pearson or Spearman*/
+/* this will create a correlation matrix showing how strongly each vaccine is associated with Teen series completion*/
+proc corr data=immunization_filtered pearson plots(maxpoints=none);
+    var Tdap MenACWY COVID Flu HPV_initiation HPV_complete Teen_series_age_13_only;
+run;
+/* Using Multiple Linear Regression to predict the proportion of adolescents completing the*/
+/* Teen Immunization Series by age 13,*/
+/* using update rates of individual vaccines as predictors*/
+proc reg data=immunization_filtered;
+    model Teen_series_age_13_only = Tdap MenACWY COVID Flu HPV_initiation HPV_complete;
+run;
+quit;
+/* Scatter plot matrix to visualize all vaccine uptake variables*/
+proc sgscatter data=immunization_filtered;
+    matrix Teen_series_age_13_only Tdap MenACWY COVID Flu HPV_initiation HPV_complete /
+    diagonal=(histogram kernel);
+run;
+/*-----------------------------------------------------------------------*/
+/*-----------------------------------------------------------------------*/
+
+
+
+
+/* Analysis for Question 3 */
+
+data immunization_filtered;
+  set WORK.IMMUNIZATION;
+  /* Remove entries with suppressed population size or missing vaccine rates */
+  if POPULATION_SIZE ne '<10 (not shown)' and Tdap ne .;
+run;
+/*creating immunization model*/
+data immunization_model;
+  set immunization_filtered;
+
+/* Create a composite average of selected vaccines */
+  avg_coverage = mean(of Tdap, MenACWY, COVID, Flu, HPV_initiation, HPV_complete);
+
+/* Define 'risk_flag' based on a threshold — adjust as needed */
+  if avg_coverage < 0.6 then risk_flag = 1;  /* High risk */
+  else risk_flag = 0;                        /* Not high risk */
+run;
+/*using Random Forest because Logistic regression produced errors*/
+/*random forest handles imperfect data, mixed variable types, and does*/
+/*not rely on linear relationships*/
+proc hpforest data=immunization_model;
+  target risk_flag;
+  input Tdap MenACWY COVID Flu HPV_initiation HPV_complete;
+  id ZIP_CODE;
+run;
+/*-----------------------------------------------------------------------*/
+
+/* Analysis for Question 4 */
+/*create outcome variable*/
+data immunization_clean;
+    set immunization_filtered;
+    if pop_bin ne '0'; /* Exclude very small ZIPs */
+    noncompliant_rate = 1 - Teen_series_age_13_only;
+run;
+
+/*run linear regression*/
+proc glm data=immunization_clean;
+    class county pop_bin;
+    model noncompliant_rate = 
+          Tdap MenACWY COVID Flu HPV_initiation HPV_complete 
+          pop_bin county;
+run;
+/*-----------------------------------------------------------------------*/
+/*-----------------------------------------------------------------------*/
+
+/* Analysis for Question 5*/
+/*filter dataset, work with only records with vaccine rates*/
+data immunization_filtered;
+  set WORK.IMMUNIZATION;
+  /* Remove entries with suppressed population size or missing vaccine rates */
+  if POPULATION_SIZE ne '<10 (not shown)' and Tdap ne .;
+run;
+/*run t-test to compare average valeus between ZIPs where stratification tools are assummed used vs not*/
+proc ttest data=immunization_filtered;
+   class strat_used;
+   var HPV_complete Teen_series_age_13_only;
+run;
