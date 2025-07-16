@@ -56,9 +56,7 @@ proc univariate data=immunization_filtered;
   histogram / normal;
   inset mean std skewness kurtosis;
 run;
-
 /*-----------------------------------------------------------------------*/
-
 /* One-way ANOVA by county for each vaccine */
 /* filter data, work without blank immunization rates */
 data immunization_filtered;
@@ -95,9 +93,7 @@ proc anova data=immunization_filtered;
 class COUNTY;
 model Teen_series_age_13_only=COUNTY;
 run;
-
 /*-----------------------------------------------------------------------*/
-
 /* Kruskal-Wallis test (non-parametric alternative by county for each vaccine */
 /* use to compare the distribution of the vaccines across different counties*/
 /* does not assume normality; useful for skewed data or ordinal responses*/
@@ -105,13 +101,8 @@ proc npar1way data=immunization_filtered wilcoxon;
 class COUNTY;
 var Tdap MenACWY COVID Flu HPV_initiation HPV_complete Teen_series_age_13_only;
 run;
-
 /*-----------------------------------------------------------------------*/
 /*-----------------------------------------------------------------------*/
-
-
-
-
 /* Analysis for Question 2 */
 /* filter data, work without blank immunization rates */
 data immunization_filtered;
@@ -143,12 +134,7 @@ proc sgscatter data=immunization_filtered;
 run;
 /*-----------------------------------------------------------------------*/
 /*-----------------------------------------------------------------------*/
-
-
-
-
 /* Analysis for Question 3 */
-
 data immunization_filtered;
   set WORK.IMMUNIZATION;
   /* Remove entries with suppressed population size or missing vaccine rates */
@@ -174,7 +160,7 @@ proc hpforest data=immunization_model;
   id ZIP_CODE;
 run;
 /*-----------------------------------------------------------------------*/
-
+/*-----------------------------------------------------------------------*/
 /* Analysis for Question 4 */
 /*create outcome variable*/
 data immunization_clean;
@@ -192,7 +178,6 @@ proc glm data=immunization_clean;
 run;
 /*-----------------------------------------------------------------------*/
 /*-----------------------------------------------------------------------*/
-
 /* Analysis for Question 5*/
 /*filter dataset, work with only records with vaccine rates*/
 data immunization_filtered;
