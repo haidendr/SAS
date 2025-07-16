@@ -1,0 +1,1 @@
+Extracted ALERT IIS ZIP-level dataset from Oregon Immunization Program Tableau dashboard: https://public.tableau.com/app/profile/oregon.immunization.program/viz/OregonAdolescentImmunizations/D-Landing
